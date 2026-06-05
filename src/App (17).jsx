@@ -188,7 +188,9 @@ function DbManager({title,color,storageKey,fields,onBack,onLogout,t_,role,record
           fields.forEach(f=>rec[f.key]=getCol(row,[f.label,...(f.aliases||[])]));
           const keyField=fields.find(f=>f.isKey);
           if(keyField&&!rec[keyField.key])return;
-          if(keyField&&cur.find(r=>norm(r[keyField.key])===norm(rec[keyField.key])))return;
+          // Normalize car/plate numbers
+          if(keyField) rec[keyField.key]=norm(rec[keyField.key]||"");
+          if(cur.find(r=>norm(r[keyField?.key]||"")===norm(rec[keyField?.key]||"")))return;
           cur.push(rec);added++;
         });
         setRecords(cur);
@@ -954,9 +956,9 @@ function AdminApp({onLogout,master,setMaster,officials,setOfficials,visitors,set
   const t_=(msg,type)=>{setToast({msg,type});setTimeout(()=>setToast(null),2600);};
 
   const OFFICIAL_FIELDS=[
-    {key:"officialName",label:"Name of Official",required:true},
-    {key:"carNumber",label:"Car Number",required:true,isKey:true,big:true,aliases:["car no","vehicle number","reg number","plate","car number"]},
-    {key:"department",label:"Department",required:true,type:"select",options:DEPARTMENTS},
+    {key:"officialName",label:"Officer/Employee Name",required:true,aliases:["officer name","officer/employee name","name","employee name","official name"]},
+    {key:"carNumber",label:"Registration Number",required:true,isKey:true,big:true,aliases:["registration number","vehicle registration no.","vehicle registration no","car number","plate number","plate","vehicle number","reg number","car no","registration"]},
+    {key:"department",label:"Division",required:true,aliases:["division","dept","department"],type:"select",options:DEPARTMENTS},
   ];
   const VISITOR_FIELDS=[
     {key:"visitorName",label:"Name of Visitor",required:true},
@@ -986,7 +988,7 @@ function AdminApp({onLogout,master,setMaster,officials,setOfficials,visitors,set
         XLSX.utils.book_append_sheet(wb,ws,"Master DB");
       }
       if((officials||[]).length){
-        const ws=XLSX.utils.json_to_sheet((officials||[]).map(r=>({"Name of Official":r.officialName||"","Car Number":r.carNumber||"","Department":r.department||""})));
+        const ws=XLSX.utils.json_to_sheet((officials||[]).map(r=>({"Registration Number":r.carNumber||"","Officer/Employee Name":r.officialName||"","Division":r.department||""})));
         XLSX.utils.book_append_sheet(wb,ws,"Officials");
       }
       if((visitors||[]).length){
