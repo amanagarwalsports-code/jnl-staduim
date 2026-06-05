@@ -1389,3 +1389,4 @@ export default function App(){
     {screen==="app"&&session?.role==="admin"&&<AdminApp onLogout={doLogout} {...shared} user={session}/>}
   </>;
 }
+ 
