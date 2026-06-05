@@ -384,30 +384,56 @@ function StaffApp({onLogout,master,log,setLog,banned,passes,setPasses,cnp,user})
       if(alreadyIn){t_("Vehicle already logged as inside","amber");return;}
       // Check for approved gate pass
       const approvedPass=passes.find(p=>norm(p.car)===norm(raw)&&p.status==="approved");
-      if(inMaster){
+      // Check if gate pass already used
+      const usedPass=passes.find(p=>norm(p.car)===norm(raw)&&p.status==="used");
+      // Check if this is a gate pass or exception vehicle that already entered before
+      const isGuestPassVehicle=inMaster&&(inMaster.isGuestPass||inMaster.isComePlay);
+      const prevGuestEntry=isGuestPassVehicle&&log.find(e=>norm(e.plate)===norm(raw)&&e.type==="guest");
+      const prevExceptionEntry=!inMaster&&!approvedPass&&log.find(e=>norm(e.plate)===norm(raw));
+
+      // Block if gate pass already used
+      if(usedPass&&!approvedPass){
+        setResult({status:"denied",plate:raw.toUpperCase(),detail:`Gate pass already used on ${fmtDate(usedPass.entryTime||Date.now())} — single entry only`});
+        t_("Gate pass already used — access denied","red");return;
+      }
+      // Block exception vehicles that already entered before
+      if(prevExceptionEntry){
+        setResult({status:"denied",plate:raw.toUpperCase(),detail:"Exception/guest entry already used — single entry only"});
+        t_("Single use only — access denied","red");return;
+      }
+
+      if(inMaster&&!isGuestPassVehicle){
         const entry={id:now,plate:raw.toUpperCase(),type:"regular",entryTime:now,exitTime:null,date:todayStr(),officer:inMaster.officer||"",division:inMaster.division||"",loggedBy:user.username};
         const nl=[...log,entry];setLog(nl);ss(K.log,nl);
-        // If also has an approved pass, mark it as used
         if(approvedPass){
           const np=passes.map(p=>p.id===approvedPass.id?{...p,status:"used",entryLogId:now,entryTime:now,entryLoggedBy:user.username}:p);
           setPasses(np);ss(K.passes,np);
         }
         setResult({status:"allowed",plate:raw.toUpperCase(),detail:`Officer: ${inMaster.officer||"—"}`});t_("Entry logged ✓","green");
       } else if(approvedPass){
-        // Gate pass vehicle — allow entry and link to pass
         const entry={id:now,plate:raw.toUpperCase(),type:"guest",entryTime:now,exitTime:null,date:todayStr(),guestName:approvedPass.name,guestReason:approvedPass.purpose,officer:"Gate Pass",division:approvedPass.dept,loggedBy:user.username,passId:approvedPass.id};
         const nl=[...log,entry];setLog(nl);ss(K.log,nl);
         const np=passes.map(p=>p.id===approvedPass.id?{...p,status:"used",entryLogId:now,entryTime:now,entryLoggedBy:user.username}:p);
         setPasses(np);ss(K.passes,np);
         setResult({status:"allowed_guest",plate:raw.toUpperCase(),detail:`Gate Pass: ${approvedPass.id} · ${approvedPass.name}`});
         t_("Gate pass entry logged ✓","green");
+      } else if(isGuestPassVehicle){
+        // Come & Play or gate pass vehicle — allow single entry
+        const prevEntry=log.find(e=>norm(e.plate)===norm(raw));
+        if(prevEntry){
+          setResult({status:"denied",plate:raw.toUpperCase(),detail:"Single entry already used for this vehicle"});
+          t_("Single use only — access denied","red");return;
+        }
+        const entry={id:now,plate:raw.toUpperCase(),type:"guest",entryTime:now,exitTime:null,date:todayStr(),officer:inMaster.officer||"",division:inMaster.division||"",loggedBy:user.username};
+        const nl=[...log,entry];setLog(nl);ss(K.log,nl);
+        setResult({status:"allowed_guest",plate:raw.toUpperCase(),detail:`${inMaster.division}: ${inMaster.officer||"—"}`});
+        t_("Entry logged ✓","green");
       } else {setResult({status:"denied",plate:raw.toUpperCase()});setView("exception");}
     } else {
       const entry=[...log].reverse().find(e=>norm(e.plate)===norm(raw)&&!e.exitTime);
       if(!entry){t_("No active entry found","amber");return;}
       const nl=log.map(e=>e.id===entry.id?{...e,exitTime:now}:e);
       setLog(nl);ss(K.log,nl);
-      // If exit of a gate pass vehicle, update pass exit time too
       if(entry.passId){
         const np=passes.map(p=>p.id===entry.passId?{...p,exitTime:now,exitLoggedBy:user.username}:p);
         setPasses(np);ss(K.passes,np);
