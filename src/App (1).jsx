@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import * as XLSX from "xlsx";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────── */
-const K = { master:"jln_master_v5", log:"jln_log_v5", users:"jln_users_v5", banned:"jln_banned_v5", passes:"jln_passes_v5" };
+const K = { master:"jln_master_v5", log:"jln_log_v5", users:"jln_users_v5", banned:"jln_banned_v5", passes:"jln_passes_v5", cnp:"jln_cnp_v1" };
 const DEFAULT_USERS = [
   { id:"admin_default", username:"admin", password:"admin123", role:"admin", createdOn:"System" },
   { id:"staff_default", username:"staff", password:"staff123", role:"staff", createdOn:"System" }
@@ -524,7 +524,7 @@ function StaffApp({onLogout,master,log,setLog,banned,passes,setPasses,user}){
 }
 
 /* ─── ADMIN APP ──────────────────────────────────────────────── */
-function AdminApp({onLogout,master,setMaster,log,setLog,users,setUsers,banned,setBanned,passes,setPasses,user}){
+function AdminApp({onLogout,master,setMaster,log,setLog,users,setUsers,banned,setBanned,passes,setPasses,cnp,setCnp,user}){
   const [view,setView]=useState("dashboard");
   const [selEntry,setSelEntry]=useState(null);
   const [toast,setToast]=useState(null);
@@ -532,7 +532,7 @@ function AdminApp({onLogout,master,setMaster,log,setLog,users,setUsers,banned,se
   const todayLog=log.filter(e=>e.date===todayStr());
   const inside=log.filter(e=>!e.exitTime&&e.date===todayStr()).length;
   const pendingPasses=passes.filter(p=>p.status==="pending");
-  const props={onLogout,master,setMaster,log,setLog,users,setUsers,banned,setBanned,passes,setPasses,t_,user};
+  const props={onLogout,master,setMaster,log,setLog,users,setUsers,banned,setBanned,passes,setPasses,cnp,setCnp,t_,user};
 
   if(view==="addCar") return <AddCarV {...props} onBack={()=>setView("dashboard")}/>;
   if(view==="db") return <DbV {...props} onBack={()=>setView("dashboard")}/>;
@@ -543,6 +543,7 @@ function AdminApp({onLogout,master,setMaster,log,setLog,users,setUsers,banned,se
   if(view==="report") return <ReportV {...props} onBack={()=>setView("dashboard")}/>;
   if(view==="changePwd") return <ChangePwdV {...props} onBack={()=>setView("dashboard")}/>;
   if(view==="gatePassMgmt") return <GatePassMgmtV {...props} onBack={()=>setView("dashboard")}/>;
+  if(view==="comePlay") return <ComePlayV {...props} onBack={()=>setView("dashboard")}/>;
 
   return <div style={{minHeight:600,background:T.navy}}>
     <Hdr role="admin" onLogout={onLogout} title="ADMIN DASHBOARD" sub={`${user.username} · ${fmtDate(Date.now())}`}/>
@@ -571,6 +572,7 @@ function AdminApp({onLogout,master,setMaster,log,setLog,users,setUsers,banned,se
         {icon:"➕",label:"Add / Import Vehicles",sub:"Register · Bulk import · Search · Remove",action:"addCar",color:T.green},
         {icon:"🎫",label:"Gate Pass Requests",sub:`${passes.length} total · ${pendingPasses.length} pending`,action:"gatePassMgmt",color:T.cyan},
         {icon:"⛔",label:"Banned Vehicles",sub:`${banned.length} banned`,action:"bannedMgmt",color:T.red},
+        {icon:"🏸",label:"Come & Play Database",sub:`${cnp.length} members registered`,action:"comePlay",color:T.purple},
         {icon:"👥",label:"User Management",sub:`${users.length} accounts`,action:"userMgmt",color:T.purple},
         {icon:"🔑",label:"Change Passwords",sub:"Update credentials",action:"changePwd",color:T.amber},
         {icon:"📥",label:"Download Report",sub:"Custom date range export",action:"report",color:T.cyan},
@@ -761,6 +763,7 @@ function AddCarV({onBack,master,setMaster,t_,onLogout,user}){
 function DbV({onBack,master,setMaster,t_,onLogout}){
   const [confirm,setConfirm]=useState(null);
   const [tab,setTab]=useState("view"); // "view" | "update"
+  const [dbSearch,setDbSearch]=useState("");
   // Upload-preview state
   const [fileName,setFileName]=useState("");
   const [preview,setPreview]=useState(null); // {toAdd:[], duplicates:[]}
@@ -861,19 +864,23 @@ function DbV({onBack,master,setMaster,t_,onLogout}){
 
       {/* ── VIEW TAB ── */}
       {tab==="view"&&<>
+        <input placeholder="🔍  Search by name, plate, division…" value={dbSearch} onChange={e=>setDbSearch(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:`1px solid ${dbSearch?T.gold:T.border}`,borderRadius:9,color:"white",padding:"10px 14px",fontSize:13,width:"100%",outline:"none",marginBottom:12,transition:"border-color .2s"}}/>
         <button onClick={exportXL} style={{width:"100%",padding:"9px 0",borderRadius:9,border:`1px solid ${T.border}`,background:"rgba(255,255,255,0.04)",color:"rgba(255,255,255,0.65)",fontSize:12,cursor:"pointer",fontWeight:600,marginBottom:14}}>⬇ Export Master Database as Excel</button>
-        {!master.length
-          ?<div style={{textAlign:"center",color:T.muted,padding:"50px 0",fontSize:12}}>No vehicles in master database</div>
-          :master.slice().reverse().map((e,i)=>(
-            <div key={i} style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,borderLeft:`2px solid ${T.green}`,borderRadius:11,padding:"11px 13px",marginBottom:7,display:"flex",alignItems:"center",gap:10}}>
-              <div style={{flex:1}}>
-                <div style={{fontFamily:"'Barlow Condensed'",fontSize:15,fontWeight:800,letterSpacing:2.5}}>{e.plate}</div>
-                <div style={{fontSize:10,color:T.muted,marginTop:2}}>{e.officer||"—"}{e.division?` · ${e.division}`:""}</div>
+        {(()=>{
+          const filtered=dbSearch.trim()?master.filter(e=>norm(e.plate).includes(norm(dbSearch))||e.officer?.toLowerCase().includes(dbSearch.toLowerCase())||e.division?.toLowerCase().includes(dbSearch.toLowerCase())):master;
+          return !filtered.length
+            ?<div style={{textAlign:"center",color:T.muted,padding:"50px 0",fontSize:12}}>{dbSearch?"No results found":"No vehicles in master database"}</div>
+            :<>{dbSearch&&<div style={{fontSize:10,color:T.muted,marginBottom:8}}>{filtered.length} result{filtered.length!==1?"s":""} for "{dbSearch}"</div>}
+            {filtered.slice().reverse().map((e,i)=>(
+              <div key={i} style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,borderLeft:`2px solid ${T.green}`,borderRadius:11,padding:"11px 13px",marginBottom:7,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"'Barlow Condensed'",fontSize:15,fontWeight:800,letterSpacing:2.5}}>{e.plate}</div>
+                  <div style={{fontSize:10,color:T.muted,marginTop:2}}>{e.officer||"—"}{e.division?` · ${e.division}`:""}</div>
+                </div>
+                <button onClick={()=>setConfirm(e.plate)} style={{background:"rgba(220,38,38,0.1)",border:"1px solid rgba(220,38,38,0.25)",color:"#fca5a5",borderRadius:7,padding:"4px 10px",fontSize:10,cursor:"pointer",fontWeight:600}}>Remove</button>
               </div>
-              <button onClick={()=>setConfirm(e.plate)} style={{background:"rgba(220,38,38,0.1)",border:"1px solid rgba(220,38,38,0.25)",color:"#fca5a5",borderRadius:7,padding:"4px 10px",fontSize:10,cursor:"pointer",fontWeight:600}}>Remove</button>
-            </div>
-          ))
-        }
+            ))}</>;
+        })()}
       </>}
 
       {/* ── UPDATE TAB ── */}
@@ -1200,6 +1207,132 @@ function ReportV({onBack,log,t_,onLogout}){
   </div>;
 }
 
+/* ─── COME & PLAY DATABASE ──────────────────────────────────── */
+function ComePlayV({onBack,onLogout,t_}){
+  const [members,setMembers]=useState([]);
+  const [tab,setTab]=useState("list"); // "list" | "add" | "detail"
+  const [sel,setSel]=useState(null);
+  const [search,setSearch]=useState("");
+  const [confirm,setConfirm]=useState(null);
+  const idRef=useRef(); const cardRef=useRef();
+
+  // form state
+  const [name,setName]=useState(""); const [phone,setPhone]=useState("");
+  const [carNo,setCarNo]=useState(""); const [bookingDetails,setBookingDetails]=useState("");
+  const [idPreview,setIdPreview]=useState(null); const [cardPreview,setCardPreview]=useState(null);
+
+  useEffect(()=>{gs(K.cnp).then(d=>d&&setMembers(d));},[]);
+
+  const readFile=async(file,cb)=>{
+    const reader=new FileReader();
+    reader.onload=e=>cb(e.target.result);
+    reader.readAsDataURL(file);
+  };
+
+  const save=async()=>{
+    if(!name.trim()||!phone.trim()||!carNo.trim()){t_("Name, phone & car number required","red");return;}
+    const entry={id:"CP-"+Math.random().toString(36).slice(2,7).toUpperCase(),name:name.trim(),phone:phone.trim(),carNo:carNo.toUpperCase().trim(),bookingDetails:bookingDetails.trim(),idPreview,cardPreview,addedOn:fmtDate(Date.now())};
+    const u=[...members,entry];setMembers(u);await ss(K.cnp,u);
+    setName("");setPhone("");setCarNo("");setBookingDetails("");setIdPreview(null);setCardPreview(null);
+    t_("Member added ✓","green");setTab("list");
+  };
+
+  const remove=id=>{
+    const u=members.filter(m=>m.id!==id);setMembers(u);ss(K.cnp,u);t_("Record removed","amber");setConfirm(null);setSel(null);setTab("list");
+  };
+
+  const filtered=search.trim()?members.filter(m=>m.name.toLowerCase().includes(search.toLowerCase())||norm(m.carNo).includes(norm(search))||m.phone.includes(search)):members;
+
+  if(tab==="detail"&&sel) return <div style={{minHeight:600,position:"relative",background:T.navy}}>
+    <Hdr role="admin" onLogout={onLogout} title="MEMBER DETAILS" sub={sel.id} onBack={()=>{setTab("list");setSel(null);}}/>
+    <div style={{padding:"14px 15px 0"}}>
+      <Card>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+          <div>
+            <div style={{fontFamily:"'Barlow Condensed'",fontSize:22,fontWeight:800,color:T.goldL,letterSpacing:.5}}>{sel.name}</div>
+            <div style={{fontSize:11,color:T.muted,marginTop:2}}>{sel.id} · Added {sel.addedOn}</div>
+          </div>
+          <Pill color="purple">Come & Play</Pill>
+        </div>
+        {[["📞 Phone",sel.phone],["🚗 Car Number",sel.carNo],["📋 Booking Details",sel.bookingDetails||"—"]].map(([l,v])=>(
+          <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"9px 0",borderBottom:`1px solid ${T.border}`,alignItems:"flex-start",gap:10}}>
+            <span style={{fontSize:11,color:T.muted,flexShrink:0}}>{l}</span>
+            <span style={{fontSize:12,fontWeight:600,textAlign:"right"}}>{v}</span>
+          </div>
+        ))}
+      </Card>
+      {sel.idPreview&&<Card><SecTitle>ID PROOF</SecTitle><img src={sel.idPreview} alt="ID" style={{width:"100%",borderRadius:9,maxHeight:180,objectFit:"cover"}}/></Card>}
+      {sel.cardPreview&&<Card><SecTitle>SAI BOOKING CARD</SecTitle><img src={sel.cardPreview} alt="SAI Card" style={{width:"100%",borderRadius:9,maxHeight:180,objectFit:"cover"}}/></Card>}
+      <button onClick={()=>setConfirm(sel.id)} style={{width:"100%",padding:"11px 0",borderRadius:9,border:"1px solid rgba(220,38,38,0.3)",background:"rgba(220,38,38,0.08)",color:"#fca5a5",fontSize:13,cursor:"pointer",fontWeight:600,marginBottom:20}}>🗑 Remove This Record</button>
+    </div>
+    {confirm&&<ConfirmModal msg={`Remove ${sel.name} from Come & Play database?`} onYes={()=>remove(confirm)} onNo={()=>setConfirm(null)}/>}
+  </div>;
+
+  if(tab==="add") return <div style={{minHeight:600,background:T.navy}}>
+    <Hdr role="admin" onLogout={onLogout} title="ADD MEMBER" sub="Come & Play database" onBack={()=>setTab("list")}/>
+    <div style={{padding:"14px 15px 0"}}>
+      <Card>
+        <SecTitle>PERSONAL DETAILS</SecTitle>
+        <FormField label="Full Name" required><input placeholder="e.g. Rahul Sharma" value={name} onChange={e=>setName(e.target.value)}/></FormField>
+        <FormField label="Phone Number" required><input placeholder="10-digit mobile number" value={phone} onChange={e=>setPhone(e.target.value)} type="tel" inputMode="numeric" maxLength={15}/></FormField>
+        <FormField label="Car / Vehicle Number" required><input placeholder="DL 01 AB 1234" value={carNo} onChange={e=>setCarNo(e.target.value.toUpperCase())} style={{fontFamily:"'Barlow Condensed'",fontSize:18,fontWeight:700,letterSpacing:3,textAlign:"center"}}/></FormField>
+      </Card>
+      <Card>
+        <SecTitle>BOOKING DETAILS</SecTitle>
+        <FormField label="Booking Details"><input placeholder="e.g. Court 3, Badminton, Mon-Fri 6-8am" value={bookingDetails} onChange={e=>setBookingDetails(e.target.value)}/></FormField>
+      </Card>
+      <Card>
+        <SecTitle>ID PROOF</SecTitle>
+        <div style={{fontSize:12,color:T.muted,marginBottom:10,lineHeight:1.6}}>Upload Aadhaar, PAN, Driving Licence etc.</div>
+        {idPreview?<div><img src={idPreview} alt="ID" style={{width:"100%",borderRadius:8,maxHeight:150,objectFit:"cover",marginBottom:8}}/>
+          <button onClick={()=>setIdPreview(null)} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid rgba(220,38,38,0.3)",background:"rgba(220,38,38,0.08)",color:"#fca5a5",fontSize:11,cursor:"pointer"}}>✕ Remove</button>
+        </div>:
+        <button onClick={()=>idRef.current.click()} style={{width:"100%",padding:"20px",borderRadius:9,border:`1px dashed ${T.border}`,background:"rgba(255,255,255,0.02)",color:T.muted,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+          <span style={{fontSize:24}}>📎</span><span>Tap to upload ID card</span>
+        </button>}
+        <input ref={idRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,setIdPreview);}}/>
+      </Card>
+      <Card>
+        <SecTitle>SAI BOOKING CARD</SecTitle>
+        <div style={{fontSize:12,color:T.muted,marginBottom:10,lineHeight:1.6}}>Upload the card issued by SAI for this member.</div>
+        {cardPreview?<div><img src={cardPreview} alt="SAI Card" style={{width:"100%",borderRadius:8,maxHeight:150,objectFit:"cover",marginBottom:8}}/>
+          <button onClick={()=>setCardPreview(null)} style={{width:"100%",padding:"7px",borderRadius:7,border:"1px solid rgba(220,38,38,0.3)",background:"rgba(220,38,38,0.08)",color:"#fca5a5",fontSize:11,cursor:"pointer"}}>✕ Remove</button>
+        </div>:
+        <button onClick={()=>cardRef.current.click()} style={{width:"100%",padding:"20px",borderRadius:9,border:`1px dashed ${T.border}`,background:"rgba(255,255,255,0.02)",color:T.muted,fontSize:13,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+          <span style={{fontSize:24}}>🪪</span><span>Tap to upload SAI card</span>
+        </button>}
+        <input ref={cardRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>{const f=e.target.files[0];if(f)readFile(f,setCardPreview);}}/>
+      </Card>
+      <BigBtn onClick={save} color="purple" style={{marginBottom:20}}>✅ SAVE TO COME & PLAY DATABASE</BigBtn>
+    </div>
+  </div>;
+
+  return <div style={{minHeight:600,position:"relative",background:T.navy}}>
+    <Hdr role="admin" onLogout={onLogout} title="COME & PLAY" sub={`${members.length} members registered`} onBack={onBack}/>
+    <div style={{padding:"14px 15px 0"}}>
+      <div style={{background:"rgba(124,58,237,0.07)",border:"1px solid rgba(124,58,237,0.25)",borderRadius:10,padding:"10px 14px",marginBottom:13,fontSize:11,color:T.purpleT,lineHeight:1.6}}>
+        🏸 Members who have booked stadium facilities via SAI. Only registered members are listed here.
+      </div>
+      <input placeholder="🔍  Search by name, car number, phone…" value={search} onChange={e=>setSearch(e.target.value)} style={{background:"rgba(255,255,255,0.05)",border:`1px solid ${search?T.purple:T.border}`,borderRadius:9,color:"white",padding:"10px 14px",fontSize:13,width:"100%",outline:"none",marginBottom:12,transition:"border-color .2s"}}/>
+      <BigBtn onClick={()=>setTab("add")} color="purple" style={{marginBottom:14}}>+ ADD NEW MEMBER</BigBtn>
+      {search&&<div style={{fontSize:10,color:T.muted,marginBottom:8}}>{filtered.length} result{filtered.length!==1?"s":""}</div>}
+      {!filtered.length?<div style={{textAlign:"center",color:T.muted,padding:"50px 0",fontSize:12}}>{search?"No members match your search":"No members yet — add one above"}</div>:
+        filtered.slice().reverse().map(m=><div key={m.id} onClick={()=>{setSel(m);setTab("detail");}} style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,borderLeft:`2px solid ${T.purple}`,borderRadius:11,padding:"12px 14px",marginBottom:8,cursor:"pointer",display:"flex",alignItems:"center",gap:11,transition:"background .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.background="rgba(124,58,237,0.07)"}
+          onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.03)"}>
+          <div style={{width:36,height:36,borderRadius:9,background:"rgba(124,58,237,0.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>🏸</div>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:"'Barlow Condensed'",fontSize:15,fontWeight:800,letterSpacing:.3,color:"white"}}>{m.name}</div>
+            <div style={{fontSize:10,color:T.muted,marginTop:2}}>{m.carNo} · {m.phone}</div>
+            {m.bookingDetails&&<div style={{fontSize:10,color:T.purpleT,marginTop:2,opacity:.8}}>{m.bookingDetails}</div>}
+          </div>
+          <div style={{color:"rgba(255,255,255,0.2)",fontSize:14}}>›</div>
+        </div>)
+      }
+    </div>
+  </div>;
+}
+
 /* ─── ROOT ──────────────────────────────────────────────────────── */
 export default function App(){
   useEffect(()=>{
@@ -1232,6 +1365,7 @@ export default function App(){
   const [users,setUsers]=useState(DEFAULT_USERS);
   const [banned,setBanned]=useState([]);
   const [passes,setPasses]=useState([]);
+  const [cnp,setCnp]=useState([]);
 
   useEffect(()=>{
     gs(K.master).then(d=>d&&setMaster(d));
@@ -1239,11 +1373,12 @@ export default function App(){
     gs(K.banned).then(d=>d&&setBanned(d));
     gs(K.passes).then(d=>d&&setPasses(d));
     gs(K.users).then(d=>d&&d.length&&setUsers(d));
+    gs(K.cnp).then(d=>d&&setCnp(d));
   },[]);
 
   const doLogin=u=>{setSession(u);setScreen("app");};
   const doLogout=()=>{setSession(null);setScreen("home");};
-  const shared={master,setMaster,log,setLog,users,setUsers,banned,setBanned,passes,setPasses};
+  const shared={master,setMaster,log,setLog,users,setUsers,banned,setBanned,passes,setPasses,cnp,setCnp};
 
   return <>
     {screen==="home"&&<HomeScreen onSelectRole={r=>setScreen(r==="admin"?"loginAdmin":"loginStaff")} onRequestPass={()=>setScreen("requestPass")}/>}
