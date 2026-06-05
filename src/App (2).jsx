@@ -594,11 +594,23 @@ function AdminApp({onLogout,master,setMaster,log,setLog,users,setUsers,banned,se
 }
 
 /* ─── GATE PASS MANAGEMENT (Admin) ──────────────────────────── */
-function GatePassMgmtV({onBack,passes,setPasses,onLogout,t_}){
+function GatePassMgmtV({onBack,passes,setPasses,master,setMaster,onLogout,t_}){
   const [filter,setFilter]=useState("pending");
   const [viewPass,setViewPass]=useState(null);
   const filtered=passes.filter(p=>filter==="all"||p.status===filter).slice().reverse();
-  const approve=id=>{const u=passes.map(p=>p.id===id?{...p,status:"approved"}:p);setPasses(u);ss(K.passes,u);t_("Pass approved ✓","green");};
+  const approve=id=>{
+    const pass=passes.find(p=>p.id===id);
+    const u=passes.map(p=>p.id===id?{...p,status:"approved"}:p);
+    setPasses(u);ss(K.passes,u);
+    // Add car to master database if not already there
+    if(pass&&!master.find(e=>norm(e.plate)===norm(pass.car))){
+      const nm=[...master,{plate:pass.car.toUpperCase(),officer:pass.name,division:"Gate Pass",addedOn:fmtDate(Date.now()),addedBy:"Gate Pass System",isGuestPass:true}];
+      setMaster(nm);ss(K.master,nm);
+      t_("Pass approved + car added to master ✓","green");
+    } else {
+      t_("Pass approved ✓","green");
+    }
+  };
   const reject=id=>{const u=passes.map(p=>p.id===id?{...p,status:"rejected"}:p);setPasses(u);ss(K.passes,u);t_("Pass rejected","amber");};
   const statusColor={pending:"amber",approved:"green",rejected:"red",used:"cyan"};
   return <div style={{minHeight:600,position:"relative",background:T.navy}}>
@@ -872,10 +884,11 @@ function DbV({onBack,master,setMaster,t_,onLogout}){
             ?<div style={{textAlign:"center",color:T.muted,padding:"50px 0",fontSize:12}}>{dbSearch?"No results found":"No vehicles in master database"}</div>
             :<>{dbSearch&&<div style={{fontSize:10,color:T.muted,marginBottom:8}}>{filtered.length} result{filtered.length!==1?"s":""} for "{dbSearch}"</div>}
             {filtered.slice().reverse().map((e,i)=>(
-              <div key={i} style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,borderLeft:`2px solid ${T.green}`,borderRadius:11,padding:"11px 13px",marginBottom:7,display:"flex",alignItems:"center",gap:10}}>
+              <div key={i} style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${T.border}`,borderLeft:`2px solid ${e.isComePlay?T.purple:e.isGuestPass?T.cyan:T.green}`,borderRadius:11,padding:"11px 13px",marginBottom:7,display:"flex",alignItems:"center",gap:10}}>
                 <div style={{flex:1}}>
                   <div style={{fontFamily:"'Barlow Condensed'",fontSize:15,fontWeight:800,letterSpacing:2.5}}>{e.plate}</div>
                   <div style={{fontSize:10,color:T.muted,marginTop:2}}>{e.officer||"—"}{e.division?` · ${e.division}`:""}</div>
+                  {(e.isComePlay||e.isGuestPass)&&<div style={{marginTop:4}}><Pill color={e.isComePlay?"purple":"cyan"}>{e.isComePlay?"Come & Play":"Gate Pass"}</Pill></div>}
                 </div>
                 <button onClick={()=>setConfirm(e.plate)} style={{background:"rgba(220,38,38,0.1)",border:"1px solid rgba(220,38,38,0.25)",color:"#fca5a5",borderRadius:7,padding:"4px 10px",fontSize:10,cursor:"pointer",fontWeight:600}}>Remove</button>
               </div>
@@ -1208,7 +1221,7 @@ function ReportV({onBack,log,t_,onLogout}){
 }
 
 /* ─── COME & PLAY DATABASE ──────────────────────────────────── */
-function ComePlayV({onBack,onLogout,t_}){
+function ComePlayV({onBack,onLogout,t_,master,setMaster}){
   const [members,setMembers]=useState([]);
   const [tab,setTab]=useState("list"); // "list" | "add" | "detail"
   const [sel,setSel]=useState(null);
@@ -1233,8 +1246,16 @@ function ComePlayV({onBack,onLogout,t_}){
     if(!name.trim()||!phone.trim()||!carNo.trim()){t_("Name, phone & car number required","red");return;}
     const entry={id:"CP-"+Math.random().toString(36).slice(2,7).toUpperCase(),name:name.trim(),phone:phone.trim(),carNo:carNo.toUpperCase().trim(),bookingDetails:bookingDetails.trim(),idPreview,cardPreview,addedOn:fmtDate(Date.now())};
     const u=[...members,entry];setMembers(u);await ss(K.cnp,u);
+    // Add car to master database if not already there
+    if(!master.find(e=>norm(e.plate)===norm(carNo))){
+      const nm=[...master,{plate:carNo.toUpperCase().trim(),officer:name.trim(),division:"Come & Play",addedOn:fmtDate(Date.now()),addedBy:"Come & Play System",isComePlay:true}];
+      setMaster(nm);ss(K.master,nm);
+      t_("Member added + car registered in master ✓","green");
+    } else {
+      t_("Member added ✓","green");
+    }
     setName("");setPhone("");setCarNo("");setBookingDetails("");setIdPreview(null);setCardPreview(null);
-    t_("Member added ✓","green");setTab("list");
+    setTab("list");
   };
 
   const remove=id=>{
@@ -1389,4 +1410,3 @@ export default function App(){
     {screen==="app"&&session?.role==="admin"&&<AdminApp onLogout={doLogout} {...shared} user={session}/>}
   </>;
 }
- 
